@@ -10,7 +10,7 @@ import { AppError } from '../middleware/error.middleware.js';
  */
 export const register = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { firebaseUid, email, displayName, phoneNumber, role = 'CUSTOMER' } = req.body;
+    const { firebaseUid, email, displayName, phoneNumber, photoURL, role = 'CUSTOMER' } = req.body;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -31,6 +31,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
         email,
         displayName,
         phoneNumber,
+        photoURL,
         role,
         status: 'ACTIVE',
         emailVerified: false,
@@ -54,6 +55,7 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
           id: user.id,
           email: user.email,
           displayName: user.displayName,
+          photoURL: user.photoURL,
           role: user.role,
         },
       },
