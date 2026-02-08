@@ -1,0 +1,339 @@
+// Prisma Schema for GLEAMY Cleaning Services Platform
+// Database: MongoDB
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// User Management
+// ============================================
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  EMPLOYEE
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+model User {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  firebaseUid   String     @unique
+  email         String     @unique
+  phoneNumber   String?
+  displayName   String
+  photoURL      String?
+  role          UserRole   @default(CUSTOMER)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Relations
+  customer Customer?
+  employee Employee?
+  reviews  Review[]
+
+  @@map("users")
+}
+
+model Customer {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address   String?
+  city      String?
+  postalCode String?
+  preferences Json?  // Store customer preferences as JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  bookings Booking[]
+  invoices Invoice[]
+
+  @@map("customers")
+}
+
+model Employee {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String   @unique @db.ObjectId
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeCode  String   @unique
+  position      String
+  skills        String[] // e.g., ["Deep Cleaning", "Window Cleaning"]
+  experience    Int      // Years of experience
+  availability  Json?    // Store availability schedule as JSON
+  isAvailable   Boolean  @default(true)
+  hireDate      DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  assignments JobAssignment[]
+  performanceMetrics EmployeePerformance[]
+
+  @@map("employees")
+}
+
+// ============================================
+// Services Management
+// ============================================
+
+enum ServiceCategory {
+  RESIDENTIAL
+  COMMERCIAL
+  DEEP_CLEANING
+  SPECIALIZED
+  POST_CONSTRUCTION
+  VEHICLE
+}
+
+model Service {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  category    ServiceCategory
+  description String
+  basePrice   Float
+  priceUnit   String          // e.g., "per hour", "per sqm", "flat rate"
+  duration    Int             // Estimated duration in minutes
+  isActive    Boolean         @default(true)
+  features    String[]
+  imageUrl    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  // Relations
+  bookings Booking[]
+
+  @@map("services")
+}
+
+// ============================================
+// Booking & Job Management
+// ============================================
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+  FAILED
+}
+
+model Booking {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  bookingNumber    String        @unique
+  customerId       String        @db.ObjectId
+  customer         Customer      @relation(fields: [customerId], references: [id])
+  serviceId        String        @db.ObjectId
+  service          Service       @relation(fields: [serviceId], references: [id])
+  
+  // Booking Details
+  scheduledDate    DateTime
+  scheduledTime    String
+  duration         Int           // in minutes
+  address          String
+  city             String
+  postalCode       String?
+  specialInstructions String?
+  
+  // Pricing
+  estimatedPrice   Float
+  finalPrice       Float?
+  discount         Float?        @default(0)
+  
+  // Status
+  status           BookingStatus @default(PENDING)
+  paymentStatus    PaymentStatus @default(PENDING)
+  
+  // Media
+  environmentImages String[]     // URLs of uploaded images
+  notes            String?
+  
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  assignments      JobAssignment[]
+  uploadedMedia    UploadedMedia[]
+  invoice          Invoice?
+  review           Review?
+
+  @@map("bookings")
+}
+
+model JobAssignment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId   String   @db.ObjectId
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  employeeId  String   @db.ObjectId
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  
+  assignedAt  DateTime @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+  
+  // Job completion details
+  beforeImages String[]
+  afterImages  String[]
+  notes        String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("job_assignments")
+}
+
+// ============================================
+// Media Management
+// ============================================
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+model UploadedMedia {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId   String    @db.ObjectId
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  type        MediaType
+  data        String    // Base64 encoded image data
+  fileName    String
+  fileSize    Int       // in bytes
+  mimeType    String
+  
+  uploadedAt  DateTime  @default(now())
+
+  @@map("uploaded_media")
+}
+
+// ============================================
+// Reviews & Ratings
+// ============================================
+
+model Review {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  bookingId  String   @unique @db.ObjectId
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id])
+  
+  rating     Int      // 1-5 stars
+  comment    String?
+  isPublic   Boolean  @default(true)
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("reviews")
+}
+
+// ============================================
+// Invoices & Payments
+// ============================================
+
+model Invoice {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  invoiceNumber String        @unique
+  bookingId     String        @unique @db.ObjectId
+  booking       Booking       @relation(fields: [bookingId], references: [id])
+  customerId    String        @db.ObjectId
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  
+  // Pricing breakdown
+  subtotal      Float
+  tax           Float         @default(0)
+  discount      Float         @default(0)
+  total         Float
+  
+  paymentStatus PaymentStatus @default(PENDING)
+  paidAmount    Float         @default(0)
+  
+  // Payment details
+  paymentMethod String?       // e.g., "Cash", "Card", "Bank Transfer"
+  paidAt        DateTime?
+  
+  dueDate       DateTime
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("invoices")
+}
+
+// ============================================
+// Analytics & Performance
+// ============================================
+
+model EmployeePerformance {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  employeeId   String   @db.ObjectId
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  month        Int
+  year         Int
+  
+  jobsCompleted Int     @default(0)
+  avgRating     Float?
+  totalRevenue  Float   @default(0)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@map("employee_performance")
+}
+
+// ============================================
+// System Configuration
+// ============================================
+
+model SystemSettings {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique
+  value     Json
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String?
+  action      String
+  entity      String
+  entityId    String?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@map("audit_logs")
+}
