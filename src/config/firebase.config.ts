@@ -10,10 +10,20 @@ export const initializeFirebase = () => {
   }
 
   try {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './firebase-service-account.json';
-    const serviceAccountFullPath = join(process.cwd(), serviceAccountPath);
-    
-    const serviceAccount = JSON.parse(readFileSync(serviceAccountFullPath, 'utf8'));
+    let serviceAccount: admin.ServiceAccount;
+
+    // Check if Firebase config is in environment variable (for production deployment like Render)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      console.log('✅ Using Firebase credentials from environment variable');
+    } 
+    // Otherwise read from file (for local development)
+    else {
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './firebase-service-account.json';
+      const serviceAccountFullPath = join(process.cwd(), serviceAccountPath);
+      serviceAccount = JSON.parse(readFileSync(serviceAccountFullPath, 'utf8'));
+      console.log('✅ Using Firebase credentials from file');
+    }
 
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
